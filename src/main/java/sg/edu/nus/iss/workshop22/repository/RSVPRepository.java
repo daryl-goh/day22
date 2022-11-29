@@ -1,5 +1,12 @@
 package sg.edu.nus.iss.workshop22.repository;
 
+import static sg.edu.nus.iss.workshop22.repository.Queries.SQL_INSERT_RSVP;
+import static sg.edu.nus.iss.workshop22.repository.Queries.SQL_SEARCH_RSVP_BY_EMAiL;
+import static sg.edu.nus.iss.workshop22.repository.Queries.SQL_SEARCH_RSVP_BY_NAME;
+import static sg.edu.nus.iss.workshop22.repository.Queries.SQL_SELECT_ALL_RSVP;
+import static sg.edu.nus.iss.workshop22.repository.Queries.SQL_TOTAL_CNT_RSVP;
+import static sg.edu.nus.iss.workshop22.repository.Queries.SQL_UPDATE_RSVP_BY_EMAIL;
+
 import java.math.BigInteger;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -8,6 +15,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -16,8 +24,6 @@ import org.springframework.stereotype.Repository;
 
 import sg.edu.nus.iss.workshop22.models.RSVP;
 import sg.edu.nus.iss.workshop22.models.RSVPTotalCntMapper;
-
-import static sg.edu.nus.iss.workshop22.repository.Queries.*;
 
 @Repository
 public class RSVPRepository {
@@ -43,11 +49,11 @@ public class RSVPRepository {
         return rsvps;
     }
 
-    public RSVP searchRSVPByName(String name) {
+    public RSVP searchRSVPByEmail(String email) {
         // prevent inheritance
         final List<RSVP> rsvps = new LinkedList<>();
         // perform the query
-        final SqlRowSet rs = jdbcTemplate.queryForRowSet(SQL_SEARCH_RSVP_BY_NAME, name);
+        final SqlRowSet rs = jdbcTemplate.queryForRowSet(SQL_SEARCH_RSVP_BY_EMAiL, email);
 
         while (rs.next()) {
             rsvps.add(RSVP.create(rs));
@@ -57,27 +63,37 @@ public class RSVPRepository {
 
     public RSVP insertRSVP(final RSVP rsvp) {
         KeyHolder keyholder = new GeneratedKeyHolder();
-        jdbcTemplate.update(conn -> {
-            PreparedStatement ps = conn.prepareStatement(SQL_INSERT_RSVP,
-                    Statement.RETURN_GENERATED_KEYS);
-            ps.setString(1, rsvp.getName());
-            ps.setString(2, rsvp.getEmail());
-            ps.setString(3, rsvp.getPhone());
-            System.out.println("Confirmation date > " + rsvp.getConfirmationDate());
-            ps.setTimestamp(4, new Timestamp(rsvp.getConfirmationDate().toDateTime().getMillis()));
-            ps.setString(5, rsvp.getComments());
-            return ps;
-        }, keyholder);
+        try {
+            jdbcTemplate.update(conn -> {
+                PreparedStatement ps = conn.prepareStatement(SQL_INSERT_RSVP,
+                        Statement.RETURN_GENERATED_KEYS);
+                ps.setString(1, rsvp.getName());
+                ps.setString(2, rsvp.getEmail());
+                ps.setString(3, rsvp.getPhone());
+                System.out.println("Confirmation date > " + rsvp.getConfirmationDate());
+                ps.setTimestamp(4, new Timestamp(rsvp.getConfirmationDate().toDateTime().getMillis()));
+                ps.setString(5, rsvp.getComments());
+                return ps;
+            }, keyholder);
+            BigInteger primaryKeyVal = (BigInteger) keyholder.getKey();
+            rsvp.setId(primaryKeyVal.intValue());
 
-        BigInteger primaryKeyVal = (BigInteger) keyholder.getKey();
-        rsvp.setId(primaryKeyVal.intValue());
+        } catch (DataIntegrityViolationException e) {
+            RSVP existingRSVP = searchRSVPByEmail(rsvp.getEmail());
+            existingRSVP.setComments(rsvp.getComments());
+            existingRSVP.setName(rsvp.getName());
+            existingRSVP.setPhone(rsvp.getPhone());
+            existingRSVP.setConfirmationDate(rsvp.getConfirmationDate());
+            if (updateRSVP(existingRSVP))
+                rsvp.setId(existingRSVP.getId());
+        }
+
         return rsvp;
     }
 
     public boolean updateRSVP(final RSVP rsvp) {
         return jdbcTemplate.update(SQL_UPDATE_RSVP_BY_EMAIL,
                 rsvp.getName(),
-                rsvp.getEmail(),
                 rsvp.getPhone(),
                 new Timestamp(rsvp.getConfirmationDate().toDateTime().getMillis()),
                 rsvp.getComments(),
@@ -86,7 +102,8 @@ public class RSVPRepository {
 
     public Integer getTotalRSVP() {
         // perform the query
-        List<RSVP> rsvps = jdbcTemplate.query(SQL_TOTAL_CNT_RSVP, new RSVPTotalCntMapper(), new Object[] {});
+        List<RSVP> rsvps = jdbcTemplate.query(SQL_TOTAL_CNT_RSVP, new RSVPTotalCntMapper(),
+                new Object[] {});
 
         return rsvps.get(0).getTotalCnt();
     }

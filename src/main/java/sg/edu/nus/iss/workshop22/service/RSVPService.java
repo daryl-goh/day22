@@ -18,11 +18,7 @@ public class RSVPService {
         return rsvpRepo.getAllRSVP(q);
     }
 
-    public RSVP searchRSVPByName(String name) {
-        return rsvpRepo.searchRSVPByName(name);
-    }
-
-    public RSVP insertPurchaseOrder(final RSVP rsvp) {
+    public RSVP insertRSVP(final RSVP rsvp) {
         return rsvpRepo.insertRSVP(rsvp);
     }
 
